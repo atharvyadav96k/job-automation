@@ -79,19 +79,38 @@ func (c *GeminiClient) GenerateText(ctx context.Context, prompt string) (string,
 	return text, err
 }
 
+const generateJSONMaxAttempts = 3
+
 // GenerateJSON asks Gemini to respond as JSON (responseMimeType) and
 // unmarshals the result into target. Used for structured outputs like the
 // tailoring result and ATS score breakdown, so the pipeline never has to
 // guess-parse free text.
+//
+// responseMimeType=application/json does not guarantee syntactically valid
+// JSON in practice — Gemini occasionally emits a literal unescaped `"`
+// inside a string value (e.g. quoting a phrase for emphasis in a cover
+// letter). This is probabilistic per call, not a deterministic prompt bug,
+// so a bounded retry is the practical mitigation.
 func (c *GeminiClient) GenerateJSON(ctx context.Context, prompt string, target any) (Usage, error) {
-	text, usage, err := c.generate(ctx, prompt, "application/json")
-	if err != nil {
-		return usage, err
+	var lastErr error
+	var usage Usage
+	for attempt := 1; attempt <= generateJSONMaxAttempts; attempt++ {
+		text, u, err := c.generate(ctx, prompt, "application/json")
+		usage = u
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if err := json.Unmarshal([]byte(text), target); err != nil {
+			if debugPath := os.Getenv("GEMINI_DEBUG_DUMP_PATH"); debugPath != "" {
+				_ = os.WriteFile(debugPath, []byte(text), 0o644)
+			}
+			lastErr = fmt.Errorf("unmarshal gemini json response: %w (body: %s)", err, text)
+			continue
+		}
+		return usage, nil
 	}
-	if err := json.Unmarshal([]byte(text), target); err != nil {
-		return usage, fmt.Errorf("unmarshal gemini json response: %w (body: %s)", err, text)
-	}
-	return usage, nil
+	return usage, fmt.Errorf("gemini json generation failed after %d attempts: %w", generateJSONMaxAttempts, lastErr)
 }
 
 func (c *GeminiClient) generate(ctx context.Context, prompt, responseMimeType string) (string, Usage, error) {

@@ -9,6 +9,10 @@ import (
 
 const jobContextPrompt = `You are analyzing a job posting to extract structured context for a resume-tailoring pipeline.
 
+Your entire response must be a single valid JSON object. Never use a literal double-quote
+character inside any string value — use single quotes instead, since an unescaped
+double-quote breaks JSON parsing.
+
 Job title: %s
 Company: %s
 Job description:

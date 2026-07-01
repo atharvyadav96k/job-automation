@@ -7,8 +7,8 @@ import "strconv"
 // Keep this list in sync with the actual template: a mismatch here
 // silently produces resumes with literal "{PLACEHOLDER}" text left in them.
 //
-// v1 scope only covers Skills + the most recent role's bullets — the base
-// template has no Summary/Projects sections yet.
+// v1 scope covers Skills, the most recent role's bullets, and a fixed
+// two-project Projects section — the base template has no Summary yet.
 const (
 	SkillsBackend     = "SKILLS_BACKEND"
 	SkillsFrontend    = "SKILLS_FRONTEND"
@@ -26,6 +26,14 @@ const Exp1BulletCount = 8
 func Exp1Bullet(n int) string {
 	return "EXP1_BULLET" + strconv.Itoa(n)
 }
+
+// ProjectCount is how many project slots the template defines
+// (PROJECT1_*, PROJECT2_*, ...).
+const ProjectCount = 2
+
+func ProjectTitle(n int) string { return "PROJECT" + strconv.Itoa(n) + "_TITLE" }
+func ProjectTech(n int) string  { return "PROJECT" + strconv.Itoa(n) + "_TECH" }
+func ProjectLink(n int) string  { return "PROJECT" + strconv.Itoa(n) + "_LINK" }
 
 // SkillCategoryKeys maps user_profile skill categories to the template
 // placeholder that should receive that category's skill list.

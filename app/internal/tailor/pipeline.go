@@ -51,7 +51,8 @@ func (p *Pipeline) Run(ctx context.Context, jobID int64) (Result, error) {
 
 	var skillsJSON []byte
 	var experienceJSON []byte
-	err = p.pool.QueryRow(ctx, `SELECT skills, experience FROM user_profile WHERE id = 1`).Scan(&skillsJSON, &experienceJSON)
+	var projectsJSON []byte
+	err = p.pool.QueryRow(ctx, `SELECT skills, experience, projects FROM user_profile WHERE id = 1`).Scan(&skillsJSON, &experienceJSON, &projectsJSON)
 	if err != nil {
 		return Result{}, fmt.Errorf("load profile: %w", err)
 	}
@@ -61,10 +62,16 @@ func (p *Pipeline) Run(ctx context.Context, jobID int64) (Result, error) {
 		return Result{}, fmt.Errorf("read experience bullets: %w", err)
 	}
 
-	tailored, usage, err := Tailor(ctx, p.client, jobTitle, companyName, descriptionClean, jobCtx, skillsJSON, exp1Bullets)
+	projects, err := profileProjects(projectsJSON)
+	if err != nil {
+		return Result{}, fmt.Errorf("read profile projects: %w", err)
+	}
+
+	tailored, usage, err := Tailor(ctx, p.client, jobTitle, companyName, descriptionClean, jobCtx, skillsJSON, exp1Bullets, projects)
 	if err != nil {
 		return Result{}, err
 	}
+	tailored.Projects = reconcileProjects(projects, tailored.Projects)
 
 	docxBytes, err := p.fillTemplate(tailored)
 	if err != nil {
@@ -191,7 +198,56 @@ func (p *Pipeline) fillTemplate(t TailorResult) ([]byte, error) {
 		}
 		values[resume.Exp1Bullet(i+1)] = bullet
 	}
+	for i := 0; i < resume.ProjectCount; i++ {
+		var proj ProjectOutput
+		if i < len(t.Projects) {
+			proj = t.Projects[i]
+		}
+		values[resume.ProjectTitle(i+1)] = proj.Title
+		values[resume.ProjectTech(i+1)] = proj.Tech
+		values[resume.ProjectLink(i+1)] = proj.Link
+	}
 	return resume.Fill(p.templatePath, values)
+}
+
+// reconcileProjects guards against the LLM not respecting "same set, just
+// reorder" (observed in practice: it can duplicate one project into both
+// slots and drop another). Only trust the LLM's order if it's a genuine
+// permutation of the real input projects; otherwise fall back to the
+// original order so no project is ever duplicated or lost.
+func reconcileProjects(input, output []ProjectOutput) []ProjectOutput {
+	if len(output) != len(input) {
+		return input
+	}
+	seen := make(map[string]bool, len(output))
+	for _, o := range output {
+		if seen[o.Title] {
+			return input
+		}
+		seen[o.Title] = true
+	}
+	for _, i := range input {
+		if !seen[i.Title] {
+			return input
+		}
+	}
+	return output
+}
+
+func profileProjects(projectsJSON []byte) ([]ProjectOutput, error) {
+	var raw []struct {
+		Title     string `json:"title"`
+		TechStack string `json:"tech_stack"`
+		Link      string `json:"link"`
+	}
+	if err := json.Unmarshal(projectsJSON, &raw); err != nil {
+		return nil, err
+	}
+	projects := make([]ProjectOutput, len(raw))
+	for i, r := range raw {
+		projects[i] = ProjectOutput{Title: r.Title, Tech: r.TechStack, Link: r.Link}
+	}
+	return projects, nil
 }
 
 func firstExperienceBullets(experienceJSON []byte) ([]string, error) {

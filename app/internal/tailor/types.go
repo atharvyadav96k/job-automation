@@ -15,11 +15,21 @@ type TailorResult struct {
 	MatchScore     int               `json:"match_score"`
 	Skills         map[string]string `json:"skills"` // keyed by category: backend, frontend, database, integration, devops, cloud, tools
 	Exp1Bullets    []string          `json:"exp1_bullets"`
+	Projects       []ProjectOutput   `json:"projects"` // ordered most-relevant-first, same set as provided
 	CoverLetter    string            `json:"cover_letter"`
 	ATSScore       int               `json:"ats_score"`
 	ATSBreakdown   ATSBreakdown      `json:"ats_breakdown"`
 	ChangesSummary string            `json:"changes_summary"`
 	Reasoning      string            `json:"reasoning"`
+}
+
+// ProjectOutput mirrors a real profile project. Title and Link are echoed
+// back unchanged by the LLM; Tech may be lightly reworded/reordered to
+// emphasize overlap with the job, but never fabricated.
+type ProjectOutput struct {
+	Title string `json:"title"`
+	Tech  string `json:"tech"`
+	Link  string `json:"link"`
 }
 
 type ATSBreakdown struct {
