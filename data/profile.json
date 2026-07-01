@@ -1,0 +1,135 @@
+{
+  "full_name": "Atharv Sanjay Yadav",
+  "email": "atharvyadav96k@gmail.com",
+  "phone": "+91-8080072198",
+  "location": "Sangli, Maharashtra, India",
+  "base_resume_docx_path": "data/base_resume.docx",
+  "skills": [
+    {
+      "name": "Go",
+      "category": "backend"
+    },
+    {
+      "name": ".NET",
+      "category": "backend"
+    },
+    {
+      "name": "C#",
+      "category": "backend"
+    },
+    {
+      "name": "React",
+      "category": "frontend"
+    },
+    {
+      "name": "Angular",
+      "category": "frontend"
+    },
+    {
+      "name": "JavaScript",
+      "category": "frontend"
+    },
+    {
+      "name": "TypeScript",
+      "category": "frontend"
+    },
+    {
+      "name": "PostgreSQL",
+      "category": "database"
+    },
+    {
+      "name": "SQL Server",
+      "category": "database"
+    },
+    {
+      "name": "Redis",
+      "category": "database"
+    },
+    {
+      "name": "REST APIs",
+      "category": "backend"
+    },
+    {
+      "name": "Webhooks",
+      "category": "integration"
+    },
+    {
+      "name": "Event-Driven Architecture",
+      "category": "integration"
+    },
+    {
+      "name": "System Integration",
+      "category": "integration"
+    },
+    {
+      "name": "HubSpot",
+      "category": "integration"
+    },
+    {
+      "name": "Docker",
+      "category": "devops"
+    },
+    {
+      "name": "Terraform",
+      "category": "devops"
+    },
+    {
+      "name": "Google Cloud Platform",
+      "category": "cloud"
+    },
+    {
+      "name": "Git",
+      "category": "tools"
+    },
+    {
+      "name": "Linux",
+      "category": "tools"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Xperate",
+      "role": "Software Developer",
+      "start_date": "2025-12",
+      "end_date": "present",
+      "bullets": [
+        "Developed enterprise integration solutions using Go, .NET, React, and Angular.",
+        "Built and maintained bidirectional synchronization between HubSpot and IntelliFlow.",
+        "Developed integration between NetDocuments and Practice for Windows (P4W).",
+        "Designed and implemented webhook-based workflows for real-time data synchronization.",
+        "Built event-driven services to ensure reliable and scalable data processing.",
+        "Developed REST APIs for enterprise applications and system integrations.",
+        "Worked with PostgreSQL, SQL Server, and Redis for data storage, caching, and synchronization.",
+        "Collaborated with cross-functional teams to deliver secure, scalable, and reliable integration solutions."
+      ]
+    },
+    {
+      "company": "Gap Technology",
+      "role": "MERN Stack Developer Intern",
+      "start_date": "2024",
+      "end_date": "2024",
+      "bullets": [
+        "Completed a one-month internship developing full-stack web applications using the MERN stack.",
+        "Implemented REST APIs and contributed to the Wallet-Watch project."
+      ]
+    },
+    {
+      "company": "ITnium",
+      "role": "MERN Stack Developer Intern",
+      "start_date": "2024",
+      "end_date": "2024",
+      "bullets": [
+        "Completed a one-month internship focused on MERN stack development.",
+        "Collaborated with the development team to build and maintain web application features."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "school": "Sharad Institute of Technology, Ichalkaranji",
+      "degree": "Bachelor of Technology (B.Tech) in Computer Science and Engineering",
+      "start_date": "2022",
+      "end_date": "2026"
+    }
+  ]
+}

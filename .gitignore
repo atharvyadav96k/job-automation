@@ -1,0 +1,6 @@
+.env
+*.log
+/app/tmp/
+node_modules/
+frontend/dist/
+frontend/build/

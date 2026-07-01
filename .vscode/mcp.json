@@ -1,0 +1,13 @@
+{
+  "mcp.servers": {
+    "repo-search": {
+      "command": "npx",
+      "args": [
+        "--cache",
+        "~/.npm/_npx",
+        "-y",
+        "@zilliz/claude-context-mcp"
+      ]
+    }
+  }
+}
