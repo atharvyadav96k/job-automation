@@ -4,12 +4,18 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"job-automation/app/internal/api"
 	"job-automation/app/internal/config"
 	"job-automation/app/internal/db"
+	"job-automation/app/internal/discovery"
 	"job-automation/app/internal/profile"
+	"job-automation/app/internal/redisqueue"
 )
+
+const remotiveResultLimit = 25
 
 func main() {
 	cfg, err := config.Load()
@@ -27,6 +33,15 @@ func main() {
 	}
 	defer pool.Close()
 
+	queue, err := redisqueue.New(cfg.RedisURL)
+	if err != nil {
+		log.Fatalf("redis queue: %v", err)
+	}
+	defer queue.Close()
+	if err := queue.Ping(ctx); err != nil {
+		log.Fatalf("redis unreachable: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := pool.Ping(r.Context()); err != nil {
@@ -41,10 +56,50 @@ func main() {
 	profileHandler := api.NewProfileHandler(profile.NewStore(pool), cfg.ResumeDir)
 	profileHandler.Register(mux)
 
+	discoveryHandler := api.NewDiscoveryHandler(pool, queue, cfg.RemotiveEnabled, remotiveResultLimit)
+	discoveryHandler.Register(mux)
+
 	protected := api.CORS(cfg.FrontendOrigin, api.BasicAuth(cfg.BasicAuthUser, cfg.BasicAuthPass, mux))
+
+	worker := discovery.NewWorker(pool, queue)
+	go worker.Run(ctx)
+	go runScrapeTicker(ctx, pool, queue, cfg)
 
 	log.Printf("listening on %s", cfg.ServerAddr)
 	if err := http.ListenAndServe(cfg.ServerAddr, protected); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// runScrapeTicker fetches immediately on startup, then on cfg.ScrapeInterval
+// — a goroutine in this process rather than a separate service, since a
+// single scheduled fetch is cheap enough not to warrant its own container
+// within the 4GB budget.
+func runScrapeTicker(ctx context.Context, pool *pgxpool.Pool, queue *redisqueue.Queue, cfg config.Config) {
+	runOnce := func() {
+		sources, err := discovery.BuildSources(ctx, pool, cfg.RemotiveEnabled, remotiveResultLimit)
+		if err != nil {
+			log.Printf("scrape ticker: build sources: %v", err)
+			return
+		}
+		fetcher := discovery.NewFetcher(pool, queue, sources)
+		queued, err := fetcher.Run(ctx)
+		if err != nil {
+			log.Printf("scrape ticker: fetch run: %v", err)
+			return
+		}
+		log.Printf("scrape ticker: queued %d new jobs from %d sources", queued, len(sources))
+	}
+
+	runOnce()
+	ticker := time.NewTicker(cfg.ScrapeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOnce()
+		}
 	}
 }
