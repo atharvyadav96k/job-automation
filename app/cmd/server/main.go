@@ -12,6 +12,7 @@ import (
 	"job-automation/app/internal/config"
 	"job-automation/app/internal/db"
 	"job-automation/app/internal/discovery"
+	"job-automation/app/internal/jobs"
 	"job-automation/app/internal/llm"
 	"job-automation/app/internal/profile"
 	"job-automation/app/internal/redisqueue"
@@ -67,6 +68,9 @@ func main() {
 	pipeline := tailor.NewPipeline(pool, geminiClient, cfg.ResumeDir, templatePath)
 	tailorHandler := api.NewTailorHandler(pipeline)
 	tailorHandler.Register(mux)
+
+	jobsHandler := api.NewJobsHandler(jobs.NewStore(pool))
+	jobsHandler.Register(mux)
 
 	protected := api.CORS(cfg.FrontendOrigin, api.BasicAuth(cfg.BasicAuthUser, cfg.BasicAuthPass, mux))
 

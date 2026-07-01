@@ -96,6 +96,14 @@ func (p *Pipeline) Run(ctx context.Context, jobID int64) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("marshal ats breakdown: %w", err)
 	}
+	tailoredContentJSON, err := json.Marshal(struct {
+		Skills      map[string]string `json:"skills"`
+		Exp1Bullets []string          `json:"exp1_bullets"`
+		Projects    []ProjectOutput   `json:"projects"`
+	}{tailored.Skills, tailored.Exp1Bullets, tailored.Projects})
+	if err != nil {
+		return Result{}, fmt.Errorf("marshal tailored content: %w", err)
+	}
 
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -112,12 +120,14 @@ func (p *Pipeline) Run(ctx context.Context, jobID int64) (Result, error) {
 		INSERT INTO resume_versions (
 			job_id, job_context_id, version_number,
 			generated_resume_docx_path, generated_cover_letter_text,
+			match_score, tailored_content,
 			ats_score, ats_score_breakdown, changes_summary, reasoning,
 			model_used, prompt_tokens, completion_tokens,
 			approved, is_active
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, true)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, true)
 		RETURNING id
 	`, jobID, jobCtxID, version, generatedPath, tailored.CoverLetter,
+		tailored.MatchScore, tailoredContentJSON,
 		tailored.ATSScore, breakdownJSON, tailored.ChangesSummary, tailored.Reasoning,
 		llmModelName(p.client), usage.PromptTokens, usage.CompletionTokens,
 	).Scan(&resumeVersionID)
