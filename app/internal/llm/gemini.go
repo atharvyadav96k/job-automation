@@ -31,12 +31,19 @@ func NewGeminiClient(apiKey string) *GeminiClient {
 		apiKey:     apiKey,
 		model:      model,
 		endpoint:   defaultGeminiEndpoint,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
+func (c *GeminiClient) Model() string { return c.model }
+
 type geminiRequest struct {
-	Contents []geminiContent `json:"contents"`
+	Contents         []geminiContent   `json:"contents"`
+	GenerationConfig *generationConfig `json:"generationConfig,omitempty"`
+}
+
+type generationConfig struct {
+	ResponseMimeType string `json:"responseMimeType,omitempty"`
 }
 
 type geminiContent struct {
@@ -51,46 +58,85 @@ type geminiResponse struct {
 	Candidates []struct {
 		Content geminiContent `json:"content"`
 	} `json:"candidates"`
+	UsageMetadata struct {
+		PromptTokenCount     int `json:"promptTokenCount"`
+		CandidatesTokenCount int `json:"candidatesTokenCount"`
+	} `json:"usageMetadata"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
+// Usage carries token accounting so callers can persist it (e.g.
+// resume_versions.prompt_tokens/completion_tokens).
+type Usage struct {
+	PromptTokens     int
+	CompletionTokens int
+}
+
 func (c *GeminiClient) GenerateText(ctx context.Context, prompt string) (string, error) {
-	reqBody, err := json.Marshal(geminiRequest{
-		Contents: []geminiContent{{Parts: []geminiPart{{Text: prompt}}}},
-	})
+	text, _, err := c.generate(ctx, prompt, "")
+	return text, err
+}
+
+// GenerateJSON asks Gemini to respond as JSON (responseMimeType) and
+// unmarshals the result into target. Used for structured outputs like the
+// tailoring result and ATS score breakdown, so the pipeline never has to
+// guess-parse free text.
+func (c *GeminiClient) GenerateJSON(ctx context.Context, prompt string, target any) (Usage, error) {
+	text, usage, err := c.generate(ctx, prompt, "application/json")
 	if err != nil {
-		return "", fmt.Errorf("marshal gemini request: %w", err)
+		return usage, err
+	}
+	if err := json.Unmarshal([]byte(text), target); err != nil {
+		return usage, fmt.Errorf("unmarshal gemini json response: %w (body: %s)", err, text)
+	}
+	return usage, nil
+}
+
+func (c *GeminiClient) generate(ctx context.Context, prompt, responseMimeType string) (string, Usage, error) {
+	reqPayload := geminiRequest{
+		Contents: []geminiContent{{Parts: []geminiPart{{Text: prompt}}}},
+	}
+	if responseMimeType != "" {
+		reqPayload.GenerationConfig = &generationConfig{ResponseMimeType: responseMimeType}
+	}
+	reqBody, err := json.Marshal(reqPayload)
+	if err != nil {
+		return "", Usage{}, fmt.Errorf("marshal gemini request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/%s:generateContent?key=%s", c.endpoint, c.model, c.apiKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", fmt.Errorf("build gemini request: %w", err)
+		return "", Usage{}, fmt.Errorf("build gemini request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("call gemini api: %w", err)
+		return "", Usage{}, fmt.Errorf("call gemini api: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read gemini response: %w", err)
+		return "", Usage{}, fmt.Errorf("read gemini response: %w", err)
 	}
 
 	var parsed geminiResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", fmt.Errorf("unmarshal gemini response: %w (body: %s)", err, body)
+		return "", Usage{}, fmt.Errorf("unmarshal gemini response: %w (body: %s)", err, body)
 	}
 	if parsed.Error != nil {
-		return "", fmt.Errorf("gemini api error: %s", parsed.Error.Message)
+		return "", Usage{}, fmt.Errorf("gemini api error: %s", parsed.Error.Message)
 	}
 	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("gemini response had no candidates (status %d, body: %s)", resp.StatusCode, body)
+		return "", Usage{}, fmt.Errorf("gemini response had no candidates (status %d, body: %s)", resp.StatusCode, body)
 	}
-	return parsed.Candidates[0].Content.Parts[0].Text, nil
+	usage := Usage{
+		PromptTokens:     parsed.UsageMetadata.PromptTokenCount,
+		CompletionTokens: parsed.UsageMetadata.CandidatesTokenCount,
+	}
+	return parsed.Candidates[0].Content.Parts[0].Text, usage, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,8 +12,10 @@ import (
 	"job-automation/app/internal/config"
 	"job-automation/app/internal/db"
 	"job-automation/app/internal/discovery"
+	"job-automation/app/internal/llm"
 	"job-automation/app/internal/profile"
 	"job-automation/app/internal/redisqueue"
+	"job-automation/app/internal/tailor"
 )
 
 const remotiveResultLimit = 25
@@ -58,6 +61,12 @@ func main() {
 
 	discoveryHandler := api.NewDiscoveryHandler(pool, queue, cfg.RemotiveEnabled, remotiveResultLimit)
 	discoveryHandler.Register(mux)
+
+	geminiClient := llm.NewGeminiClient(cfg.GeminiAPIKey)
+	templatePath := filepath.Join(cfg.ResumeDir, "base_resume.docx")
+	pipeline := tailor.NewPipeline(pool, geminiClient, cfg.ResumeDir, templatePath)
+	tailorHandler := api.NewTailorHandler(pipeline)
+	tailorHandler.Register(mux)
 
 	protected := api.CORS(cfg.FrontendOrigin, api.BasicAuth(cfg.BasicAuthUser, cfg.BasicAuthPass, mux))
 

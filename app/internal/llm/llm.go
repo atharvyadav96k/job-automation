@@ -6,4 +6,5 @@ import "context"
 // without touching the pipeline code that calls it.
 type Client interface {
 	GenerateText(ctx context.Context, prompt string) (string, error)
+	GenerateJSON(ctx context.Context, prompt string, target any) (Usage, error)
 }
