@@ -20,7 +20,7 @@ import (
 )
 
 const remotiveResultLimit = 25
-const aiSearchResultLimit = 8
+const jsearchResultLimit = 10
 
 func main() {
 	cfg, err := config.Load()
@@ -63,14 +63,21 @@ func main() {
 
 	geminiClient := llm.NewGeminiClient(cfg.GeminiAPIKey)
 
-	sourcesCfg := discovery.SourcesConfig{
+	// Manual "Scan" (POST /api/discovery/run) includes JSearch; the
+	// automatic scheduled ticker never does — JSearch is a metered API, and
+	// firing it on a timer is the one thing the user explicitly didn't want.
+	manualSourcesCfg := discovery.SourcesConfig{
 		RemotiveEnabled: cfg.RemotiveEnabled,
 		RemotiveLimit:   remotiveResultLimit,
-		AISearchEnabled: cfg.AISearchEnabled,
-		AISearchLimit:   aiSearchResultLimit,
-		AIClient:        geminiClient,
+		JSearchEnabled:  cfg.JSearchEnabled,
+		JSearchAPIKeys:  cfg.JSearchAPIKeys,
+		JSearchCountry:  cfg.JSearchCountry,
+		JSearchLimit:    jsearchResultLimit,
 	}
-	discoveryHandler := api.NewDiscoveryHandler(pool, queue, sourcesCfg)
+	tickerSourcesCfg := manualSourcesCfg
+	tickerSourcesCfg.JSearchEnabled = false
+
+	discoveryHandler := api.NewDiscoveryHandler(pool, queue, manualSourcesCfg)
 	discoveryHandler.Register(mux)
 
 	templatePath := filepath.Join(cfg.ResumeDir, "base_resume.docx")
@@ -88,7 +95,7 @@ func main() {
 
 	worker := discovery.NewWorker(pool, queue)
 	go worker.Run(ctx)
-	go runScrapeTicker(ctx, pool, queue, cfg, sourcesCfg)
+	go runScrapeTicker(ctx, pool, queue, cfg, tickerSourcesCfg)
 
 	log.Printf("listening on %s", cfg.ServerAddr)
 	if err := http.ListenAndServe(cfg.ServerAddr, protected); err != nil {

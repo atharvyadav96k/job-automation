@@ -12,12 +12,11 @@ import (
 	"job-automation/app/internal/config"
 	"job-automation/app/internal/db"
 	"job-automation/app/internal/discovery"
-	"job-automation/app/internal/llm"
 	"job-automation/app/internal/redisqueue"
 )
 
 const remotiveResultLimit = 25
-const aiSearchResultLimit = 8
+const jsearchResultLimit = 10
 
 func main() {
 	drainTimeout := flag.Duration("drain-timeout", 10*time.Second, "how long to wait for the queue to drain")
@@ -41,13 +40,13 @@ func main() {
 	}
 	defer queue.Close()
 
-	geminiClient := llm.NewGeminiClient(cfg.GeminiAPIKey)
 	sources, err := discovery.BuildSources(ctx, pool, discovery.SourcesConfig{
 		RemotiveEnabled: cfg.RemotiveEnabled,
 		RemotiveLimit:   remotiveResultLimit,
-		AISearchEnabled: cfg.AISearchEnabled,
-		AISearchLimit:   aiSearchResultLimit,
-		AIClient:        geminiClient,
+		JSearchEnabled:  cfg.JSearchEnabled,
+		JSearchAPIKeys:  cfg.JSearchAPIKeys,
+		JSearchCountry:  cfg.JSearchCountry,
+		JSearchLimit:    jsearchResultLimit,
 	})
 	if err != nil {
 		log.Fatalf("build sources: %v", err)

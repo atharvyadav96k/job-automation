@@ -53,15 +53,23 @@ func (w *Worker) process(ctx context.Context, payload string) error {
 	clean := CleanHTML(job.DescriptionHTML)
 
 	_, err = w.pool.Exec(ctx, `
-		INSERT INTO jobs (company_id, title, url, description_raw, description_clean, source, status)
-		VALUES ($1, $2, $3, $4, $5, $6, 'new')
+		INSERT INTO jobs (company_id, title, url, description_raw, description_clean, source, status, apply_url, apply_portal, contact_email)
+		VALUES ($1, $2, $3, $4, $5, $6, 'new', $7, $8, $9)
 		ON CONFLICT (url) DO NOTHING
-	`, companyID, job.Title, job.URL, job.DescriptionHTML, clean, job.Source)
+	`, companyID, job.Title, job.URL, job.DescriptionHTML, clean, job.Source,
+		nullIfEmpty(job.ApplyURL), nullIfEmpty(job.ApplyPortal), nullIfEmpty(job.ContactEmail))
 	if err != nil {
 		return fmt.Errorf("insert job %s: %w", job.URL, err)
 	}
 	log.Printf("discovery worker: stored job %q (%s)", job.Title, job.URL)
 	return nil
+}
+
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (w *Worker) getOrCreateCompany(ctx context.Context, name, atsPlatform string) (int64, error) {

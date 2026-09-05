@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"job-automation/app/internal/llm"
 )
 
 // LoadCompanySources builds a Source per row in companies whose
@@ -42,15 +41,16 @@ func LoadCompanySources(ctx context.Context, pool *pgxpool.Pool) ([]Source, erro
 type SourcesConfig struct {
 	RemotiveEnabled bool
 	RemotiveLimit   int
-	AISearchEnabled bool
-	AISearchLimit   int
-	AIClient        llm.GroundedSearcher // nil if the configured LLM provider doesn't support grounding
+	JSearchEnabled  bool
+	JSearchAPIKeys  []string // tried in order, falling over to the next on a quota/auth error
+	JSearchCountry  string
+	JSearchLimit    int
 }
 
 // BuildSources assembles every configured source fresh: company rows can
 // change at any time, and the profile's skills (which drive the Remotive
-// and AI-search queries) can too, so this is called once per fetch run
-// rather than cached.
+// and JSearch queries) can too, so this is called once per fetch run rather
+// than cached.
 func BuildSources(ctx context.Context, pool *pgxpool.Pool, cfg SourcesConfig) ([]Source, error) {
 	sources, err := LoadCompanySources(ctx, pool)
 	if err != nil {
@@ -67,32 +67,18 @@ func BuildSources(ctx context.Context, pool *pgxpool.Pool, cfg SourcesConfig) ([
 		}
 	}
 
-	if cfg.AISearchEnabled && cfg.AIClient != nil && haveSkills {
-		desc, err := AllSkillNames(skillsJSON)
-		if err == nil && desc != "" {
-			sources = append(sources, NewAISearchSource(cfg.AIClient, desc, cfg.AISearchLimit))
+	if cfg.JSearchEnabled && len(cfg.JSearchAPIKeys) > 0 && haveSkills {
+		// JSearch is a literal search engine (Google for Jobs), not an LLM:
+		// tested live, 2 broad skill terms returns real results ("Software
+		// Developer Go Java" -> 10 hits); adding more, especially a niche
+		// library name like "Gorilla Mux", collapses results to zero.
+		topSkills, err := RemotiveQueryFromProfile(skillsJSON, 2)
+		if err == nil {
+			query := "Software Developer " + topSkills
+			sources = append(sources, NewJSearchSource(cfg.JSearchAPIKeys, query, cfg.JSearchCountry, cfg.JSearchLimit))
 		}
 	}
 	return sources, nil
-}
-
-// AllSkillNames joins every skill name in the profile (unlike
-// RemotiveQueryFromProfile's top-N, the AI search prompt benefits from the
-// full picture rather than a short keyword query).
-func AllSkillNames(skillsJSON []byte) (string, error) {
-	var skills []struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(skillsJSON, &skills); err != nil {
-		return "", err
-	}
-	names := make([]string, 0, len(skills))
-	for _, s := range skills {
-		if s.Name != "" {
-			names = append(names, s.Name)
-		}
-	}
-	return strings.Join(names, ", "), nil
 }
 
 // RemotiveQueryFromProfile builds a search query from the profile's top

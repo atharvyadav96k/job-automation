@@ -66,6 +66,9 @@ export interface JobDetail {
   url: string
   description_clean: string
   discovered_at: string
+  apply_url: string | null
+  apply_portal: string | null
+  contact_email: string | null
   job_context: JobContext | null
   resume_versions: ResumeVersion[]
   application: Application | null

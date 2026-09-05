@@ -11,6 +11,9 @@ type RawJob struct {
 	URL             string `json:"url"`
 	DescriptionHTML string `json:"description_html"`
 	Source          string `json:"source"` // 'scraper' per jobs.source convention
+	ApplyURL        string `json:"apply_url"`
+	ApplyPortal     string `json:"apply_portal"`
+	ContactEmail    string `json:"contact_email"`
 }
 
 type Source interface {

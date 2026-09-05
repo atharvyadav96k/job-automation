@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -17,9 +18,14 @@ type Config struct {
 	FrontendOrigin  string
 	ScrapeInterval  time.Duration
 	RemotiveEnabled bool
-	AISearchEnabled bool
-	GitHubUsername  string
-	GitHubToken     string
+	JSearchEnabled  bool
+	// Multiple keys let quota be spread across more than one JSearch
+	// account — JSearchSource rotates through them and falls over to the
+	// next one on a quota/auth error instead of failing the whole fetch.
+	JSearchAPIKeys []string
+	JSearchCountry string
+	GitHubUsername string
+	GitHubToken    string
 }
 
 func Load() (Config, error) {
@@ -39,7 +45,9 @@ func Load() (Config, error) {
 		FrontendOrigin:  envOrDefault("FRONTEND_ORIGIN", "http://localhost:5173"),
 		ScrapeInterval:  scrapeInterval,
 		RemotiveEnabled: envOrDefault("REMOTIVE_ENABLED", "true") == "true",
-		AISearchEnabled: envOrDefault("AI_SEARCH_ENABLED", "true") == "true",
+		JSearchEnabled:  envOrDefault("JSEARCH_ENABLED", "true") == "true",
+		JSearchAPIKeys:  splitCommaList(os.Getenv("JSEARCH_API_KEYS")),
+		JSearchCountry:  envOrDefault("JSEARCH_COUNTRY", "in"),
 		GitHubUsername:  os.Getenv("GITHUB_USERNAME"),
 		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
 	}
@@ -54,4 +62,20 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// splitCommaList parses "a, b,c" into ["a", "b", "c"], dropping empty
+// entries — used for JSEARCH_API_KEYS so more than one key can be supplied.
+func splitCommaList(v string) []string {
+	if v == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

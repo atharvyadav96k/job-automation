@@ -17,7 +17,7 @@ import {
   Alert,
 } from '@mui/material'
 import type { JobDetail, ResumeVersion } from '../api/jobs'
-import { getJob, approveVersion, rejectJob, markApplied, recordReply } from '../api/jobs'
+import { getJob, approveVersion, rejectJob, markApplied, recordReply, tailorJob } from '../api/jobs'
 import TextDiff from '../components/TextDiff'
 
 interface Props {
@@ -32,6 +32,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   const [diffFromId, setDiffFromId] = useState<number | ''>('')
   const [diffToId, setDiffToId] = useState<number | ''>('')
   const [markingApplied, setMarkingApplied] = useState(false)
+  const [generatingResume, setGeneratingResume] = useState(false)
   const [replyDialogOpen, setReplyDialogOpen] = useState(false)
   const [replyChannel, setReplyChannel] = useState('')
   const [replyOutcome, setReplyOutcome] = useState<'interview' | 'rejected' | 'offer' | 'other'>('interview')
@@ -71,6 +72,19 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Reject failed')
+    }
+  }
+
+  async function handleGenerateResume() {
+    setGeneratingResume(true)
+    setError(null)
+    try {
+      await tailorJob(jobId)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Resume generation failed')
+    } finally {
+      setGeneratingResume(false)
     }
   }
 
@@ -140,6 +154,10 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
           Reject job
         </Button>
 
+        <Button variant="contained" onClick={handleGenerateResume} disabled={generatingResume}>
+          {generatingResume ? 'Generating…' : job.resume_versions.length > 0 ? 'Re-generate resume' : 'Generate resume'}
+        </Button>
+
         {!job.application && (
           <Button
             variant="outlined"
@@ -194,6 +212,35 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {(job.apply_url || job.contact_email) && (
+        <Paper variant="outlined" className="p-4 mb-6">
+          <Typography variant="h6" className="mb-2">
+            How to apply
+          </Typography>
+          {job.apply_url && (
+            <Typography variant="body2" className="mb-1">
+              <Link href={job.apply_url} target="_blank" rel="noreferrer">
+                Apply via {job.apply_portal ?? 'this link'}
+              </Link>
+            </Typography>
+          )}
+          {job.contact_email && (
+            <Typography variant="body2">
+              Contact: <Link href={`mailto:${job.contact_email}`}>{job.contact_email}</Link>
+            </Typography>
+          )}
+        </Paper>
+      )}
+
+      <Paper variant="outlined" className="p-4 mb-6">
+        <Typography variant="h6" className="mb-2">
+          Job description
+        </Typography>
+        <Typography variant="body2" className="whitespace-pre-wrap text-gray-700">
+          {job.description_clean}
+        </Typography>
+      </Paper>
 
       {job.job_context && (
         <Paper variant="outlined" className="p-4 mb-6">

@@ -73,6 +73,9 @@ type Detail struct {
 	URL              string          `json:"url"`
 	DescriptionClean string          `json:"description_clean"`
 	DiscoveredAt     time.Time       `json:"discovered_at"`
+	ApplyURL         *string         `json:"apply_url"`
+	ApplyPortal      *string         `json:"apply_portal"`
+	ContactEmail     *string         `json:"contact_email"`
 	JobContext       *JobContext     `json:"job_context"`
 	ResumeVersions   []ResumeVersion `json:"resume_versions"`
 	Application      *Application    `json:"application"`
@@ -131,12 +134,17 @@ type ResumeVersion struct {
 }
 
 func (s *Store) Get(ctx context.Context, id int64) (Detail, error) {
-	var d Detail
+	// Initialized (not nil) so a job with zero resume versions serializes as
+	// resume_versions: [] rather than null — the frontend treats this field
+	// as always being a real array.
+	d := Detail{ResumeVersions: []ResumeVersion{}}
 	err := s.pool.QueryRow(ctx, `
-		SELECT j.id, j.title, c.name, j.status, j.url, j.description_clean, j.discovered_at
+		SELECT j.id, j.title, c.name, j.status, j.url, j.description_clean, j.discovered_at,
+			j.apply_url, j.apply_portal, j.contact_email
 		FROM jobs j JOIN companies c ON c.id = j.company_id
 		WHERE j.id = $1
-	`, id).Scan(&d.ID, &d.Title, &d.CompanyName, &d.Status, &d.URL, &d.DescriptionClean, &d.DiscoveredAt)
+	`, id).Scan(&d.ID, &d.Title, &d.CompanyName, &d.Status, &d.URL, &d.DescriptionClean, &d.DiscoveredAt,
+		&d.ApplyURL, &d.ApplyPortal, &d.ContactEmail)
 	if err != nil {
 		return Detail{}, fmt.Errorf("load job: %w", err)
 	}
