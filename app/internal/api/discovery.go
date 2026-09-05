@@ -9,41 +9,27 @@ import (
 )
 
 type DiscoveryHandler struct {
-	pool            *pgxpool.Pool
-	queue           *redisqueue.Queue
-	remotiveEnabled bool
-	remotiveLimit   int
+	pool       *pgxpool.Pool
+	queue      *redisqueue.Queue
+	sourcesCfg discovery.SourcesConfig
 }
 
-func NewDiscoveryHandler(pool *pgxpool.Pool, queue *redisqueue.Queue, remotiveEnabled bool, remotiveLimit int) *DiscoveryHandler {
-	return &DiscoveryHandler{pool: pool, queue: queue, remotiveEnabled: remotiveEnabled, remotiveLimit: remotiveLimit}
+func NewDiscoveryHandler(pool *pgxpool.Pool, queue *redisqueue.Queue, sourcesCfg discovery.SourcesConfig) *DiscoveryHandler {
+	return &DiscoveryHandler{pool: pool, queue: queue, sourcesCfg: sourcesCfg}
 }
 
 func (h *DiscoveryHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/discovery/run", h.run)
 }
 
-// run triggers an immediate fetch on demand, instead of waiting for the
-// next scheduled tick — useful right after adding a new company, and
-// cheaper than lowering the global interval just to test one source.
+// run triggers an immediate fetch on demand — a deliberate click always
+// fetches, unlike the scheduled ticker (see runScrapeTicker) which skips
+// itself while a review backlog exists. "Scan" is the one place that
+// backlog-throttle doesn't apply: it's an explicit ask for more right now.
 func (h *DiscoveryHandler) run(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	available, err := discovery.AvailableJobsCount(ctx, h.pool)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	if available > 0 {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"skipped":        true,
-			"reason":         "jobs still pending review/application",
-			"available_jobs": available,
-		})
-		return
-	}
-
-	sources, err := discovery.BuildSources(ctx, h.pool, h.remotiveEnabled, h.remotiveLimit)
+	sources, err := discovery.BuildSources(ctx, h.pool, h.sourcesCfg)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

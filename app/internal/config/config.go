@@ -17,6 +17,7 @@ type Config struct {
 	FrontendOrigin  string
 	ScrapeInterval  time.Duration
 	RemotiveEnabled bool
+	AISearchEnabled bool
 	GitHubUsername  string
 	GitHubToken     string
 }
@@ -38,6 +39,7 @@ func Load() (Config, error) {
 		FrontendOrigin:  envOrDefault("FRONTEND_ORIGIN", "http://localhost:5173"),
 		ScrapeInterval:  scrapeInterval,
 		RemotiveEnabled: envOrDefault("REMOTIVE_ENABLED", "true") == "true",
+		AISearchEnabled: envOrDefault("AI_SEARCH_ENABLED", "true") == "true",
 		GitHubUsername:  os.Getenv("GITHUB_USERNAME"),
 		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
 	}

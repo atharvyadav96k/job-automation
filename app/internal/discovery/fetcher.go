@@ -30,8 +30,13 @@ func (f *Fetcher) Run(ctx context.Context) (queued int, err error) {
 			log.Printf("discovery: source %s failed: %v", src.Name(), err)
 			continue
 		}
+		skipped := 0
 		for _, job := range raw {
 			if job.URL == "" {
+				continue
+			}
+			if IsSeniorLevelTitle(job.Title) {
+				skipped++
 				continue
 			}
 			var exists bool
@@ -50,7 +55,7 @@ func (f *Fetcher) Run(ctx context.Context) (queued int, err error) {
 			}
 			queued++
 		}
-		log.Printf("discovery: source %s fetched %d jobs", src.Name(), len(raw))
+		log.Printf("discovery: source %s fetched %d jobs (%d skipped as too senior)", src.Name(), len(raw), skipped)
 	}
 	return queued, nil
 }

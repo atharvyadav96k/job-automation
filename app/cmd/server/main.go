@@ -20,6 +20,7 @@ import (
 )
 
 const remotiveResultLimit = 25
+const aiSearchResultLimit = 8
 
 func main() {
 	cfg, err := config.Load()
@@ -60,10 +61,18 @@ func main() {
 	profileHandler := api.NewProfileHandler(profile.NewStore(pool), cfg.ResumeDir)
 	profileHandler.Register(mux)
 
-	discoveryHandler := api.NewDiscoveryHandler(pool, queue, cfg.RemotiveEnabled, remotiveResultLimit)
+	geminiClient := llm.NewGeminiClient(cfg.GeminiAPIKey)
+
+	sourcesCfg := discovery.SourcesConfig{
+		RemotiveEnabled: cfg.RemotiveEnabled,
+		RemotiveLimit:   remotiveResultLimit,
+		AISearchEnabled: cfg.AISearchEnabled,
+		AISearchLimit:   aiSearchResultLimit,
+		AIClient:        geminiClient,
+	}
+	discoveryHandler := api.NewDiscoveryHandler(pool, queue, sourcesCfg)
 	discoveryHandler.Register(mux)
 
-	geminiClient := llm.NewGeminiClient(cfg.GeminiAPIKey)
 	templatePath := filepath.Join(cfg.ResumeDir, "base_resume.docx")
 	pipeline := tailor.NewPipeline(pool, geminiClient, cfg.ResumeDir, templatePath)
 	tailorHandler := api.NewTailorHandler(pipeline)
@@ -79,7 +88,7 @@ func main() {
 
 	worker := discovery.NewWorker(pool, queue)
 	go worker.Run(ctx)
-	go runScrapeTicker(ctx, pool, queue, cfg)
+	go runScrapeTicker(ctx, pool, queue, cfg, sourcesCfg)
 
 	log.Printf("listening on %s", cfg.ServerAddr)
 	if err := http.ListenAndServe(cfg.ServerAddr, protected); err != nil {
@@ -92,7 +101,7 @@ func main() {
 // single scheduled fetch is cheap enough not to warrant its own container
 // within the 4GB budget. Each tick only actually fetches if there's no
 // backlog of jobs still pending review/application — see AvailableJobsCount.
-func runScrapeTicker(ctx context.Context, pool *pgxpool.Pool, queue *redisqueue.Queue, cfg config.Config) {
+func runScrapeTicker(ctx context.Context, pool *pgxpool.Pool, queue *redisqueue.Queue, cfg config.Config, sourcesCfg discovery.SourcesConfig) {
 	runOnce := func() {
 		available, err := discovery.AvailableJobsCount(ctx, pool)
 		if err != nil {
@@ -104,7 +113,7 @@ func runScrapeTicker(ctx context.Context, pool *pgxpool.Pool, queue *redisqueue.
 			return
 		}
 
-		sources, err := discovery.BuildSources(ctx, pool, cfg.RemotiveEnabled, remotiveResultLimit)
+		sources, err := discovery.BuildSources(ctx, pool, sourcesCfg)
 		if err != nil {
 			log.Printf("scrape ticker: build sources: %v", err)
 			return
