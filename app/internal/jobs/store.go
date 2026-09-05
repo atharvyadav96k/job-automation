@@ -75,6 +75,20 @@ type Detail struct {
 	DiscoveredAt     time.Time       `json:"discovered_at"`
 	JobContext       *JobContext     `json:"job_context"`
 	ResumeVersions   []ResumeVersion `json:"resume_versions"`
+	Application      *Application    `json:"application"`
+}
+
+// Application mirrors the applications table. ReplyChannel/Outcome/RepliedAt
+// are only ever set by the account owner manually reporting a reply — see
+// Store.RecordReply.
+type Application struct {
+	ID           int64      `json:"id"`
+	Method       string     `json:"method"`
+	Status       string     `json:"status"`
+	SubmittedAt  *time.Time `json:"submitted_at"`
+	RepliedAt    *time.Time `json:"replied_at"`
+	ReplyChannel *string    `json:"reply_channel"`
+	Outcome      string     `json:"outcome"`
 }
 
 type JobContext struct {
@@ -171,7 +185,97 @@ func (s *Store) Get(ctx context.Context, id int64) (Detail, error) {
 		}
 		d.ResumeVersions = append(d.ResumeVersions, rv)
 	}
-	return d, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Detail{}, err
+	}
+
+	var app Application
+	err = s.pool.QueryRow(ctx, `
+		SELECT id, method, status, submitted_at, replied_at, reply_channel, outcome
+		FROM applications WHERE job_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 1
+	`, id).Scan(&app.ID, &app.Method, &app.Status, &app.SubmittedAt, &app.RepliedAt, &app.ReplyChannel, &app.Outcome)
+	if err == nil {
+		d.Application = &app
+	} else if err != pgx.ErrNoRows {
+		return Detail{}, fmt.Errorf("load application: %w", err)
+	}
+
+	return d, nil
+}
+
+// MarkApplied records that the account owner has applied for this job
+// outside the system (browser automation isn't built yet — see plan.md
+// Phase 4) using the approved resume. Refuses to run unless an approved,
+// active resume_version exists for the job — the same permanent gate that
+// will bind any future automated dispatcher. Idempotent: returns the
+// existing application if one is already on record.
+func (s *Store) MarkApplied(ctx context.Context, jobID int64) (Application, error) {
+	var existing Application
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, method, status, submitted_at, replied_at, reply_channel, outcome
+		FROM applications WHERE job_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 1
+	`, jobID).Scan(&existing.ID, &existing.Method, &existing.Status, &existing.SubmittedAt,
+		&existing.RepliedAt, &existing.ReplyChannel, &existing.Outcome)
+	if err == nil {
+		return existing, nil
+	} else if err != pgx.ErrNoRows {
+		return Application{}, fmt.Errorf("check existing application: %w", err)
+	}
+
+	var resumeVersionID int64
+	err = s.pool.QueryRow(ctx, `
+		SELECT id FROM resume_versions WHERE job_id = $1 AND approved = true AND is_active = true LIMIT 1
+	`, jobID).Scan(&resumeVersionID)
+	if err == pgx.ErrNoRows {
+		return Application{}, fmt.Errorf("no approved resume version for job %d — approve one before marking as applied", jobID)
+	} else if err != nil {
+		return Application{}, fmt.Errorf("find approved resume version: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Application{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var app Application
+	err = tx.QueryRow(ctx, `
+		INSERT INTO applications (job_id, resume_version_id, method, status, submitted_at)
+		VALUES ($1, $2, 'manual', 'submitted', now())
+		RETURNING id, method, status, submitted_at, replied_at, reply_channel, outcome
+	`, jobID, resumeVersionID).Scan(&app.ID, &app.Method, &app.Status, &app.SubmittedAt,
+		&app.RepliedAt, &app.ReplyChannel, &app.Outcome)
+	if err != nil {
+		return Application{}, fmt.Errorf("insert application: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE jobs SET status = 'applied' WHERE id = $1`, jobID); err != nil {
+		return Application{}, fmt.Errorf("update job status: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Application{}, err
+	}
+	return app, nil
+}
+
+var validOutcomes = map[string]bool{"interview": true, "rejected": true, "offer": true, "other": true}
+
+// RecordReply is the "I got a reply" action — always a manual report from
+// the account owner, since there's no inbox integration to detect this
+// automatically.
+func (s *Store) RecordReply(ctx context.Context, applicationID int64, channel, outcome string) error {
+	if !validOutcomes[outcome] {
+		return fmt.Errorf("invalid outcome %q", outcome)
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE applications SET replied_at = now(), reply_channel = $2, outcome = $3 WHERE id = $1
+	`, applicationID, channel, outcome)
+	if err != nil {
+		return fmt.Errorf("record reply: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("application %d not found", applicationID)
+	}
+	return nil
 }
 
 // Approve marks the given resume_version as the chosen one for its job:

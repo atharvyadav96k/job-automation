@@ -54,3 +54,16 @@ func (f *Fetcher) Run(ctx context.Context) (queued int, err error) {
 	}
 	return queued, nil
 }
+
+// AvailableJobsCount returns how many jobs still need action — not yet
+// applied to and not skipped. Scraping is throttled on this: no point
+// piling up more discovered jobs while there's already a backlog waiting
+// for review/tailoring/application.
+func AvailableJobsCount(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM jobs WHERE status NOT IN ('applied', 'skipped')`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count available jobs: %w", err)
+	}
+	return count, nil
+}

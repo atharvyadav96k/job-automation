@@ -72,6 +72,9 @@ func main() {
 	jobsHandler := api.NewJobsHandler(jobs.NewStore(pool))
 	jobsHandler.Register(mux)
 
+	skillGapsHandler := api.NewSkillGapsHandler(pool)
+	skillGapsHandler.Register(mux)
+
 	protected := api.CORS(cfg.FrontendOrigin, api.BasicAuth(cfg.BasicAuthUser, cfg.BasicAuthPass, mux))
 
 	worker := discovery.NewWorker(pool, queue)
@@ -84,12 +87,23 @@ func main() {
 	}
 }
 
-// runScrapeTicker fetches immediately on startup, then on cfg.ScrapeInterval
+// runScrapeTicker checks immediately on startup, then on cfg.ScrapeInterval
 // — a goroutine in this process rather than a separate service, since a
 // single scheduled fetch is cheap enough not to warrant its own container
-// within the 4GB budget.
+// within the 4GB budget. Each tick only actually fetches if there's no
+// backlog of jobs still pending review/application — see AvailableJobsCount.
 func runScrapeTicker(ctx context.Context, pool *pgxpool.Pool, queue *redisqueue.Queue, cfg config.Config) {
 	runOnce := func() {
+		available, err := discovery.AvailableJobsCount(ctx, pool)
+		if err != nil {
+			log.Printf("scrape ticker: check available jobs: %v", err)
+			return
+		}
+		if available > 0 {
+			log.Printf("scrape ticker: skipping — %d job(s) still pending review/application", available)
+			return
+		}
+
 		sources, err := discovery.BuildSources(ctx, pool, cfg.RemotiveEnabled, remotiveResultLimit)
 		if err != nil {
 			log.Printf("scrape ticker: build sources: %v", err)

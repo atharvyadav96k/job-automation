@@ -4,6 +4,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Link,
   MenuItem,
@@ -13,7 +17,7 @@ import {
   Alert,
 } from '@mui/material'
 import type { JobDetail, ResumeVersion } from '../api/jobs'
-import { getJob, approveVersion, rejectJob } from '../api/jobs'
+import { getJob, approveVersion, rejectJob, markApplied, recordReply } from '../api/jobs'
 import TextDiff from '../components/TextDiff'
 
 interface Props {
@@ -27,6 +31,11 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   const [busyVersionId, setBusyVersionId] = useState<number | null>(null)
   const [diffFromId, setDiffFromId] = useState<number | ''>('')
   const [diffToId, setDiffToId] = useState<number | ''>('')
+  const [markingApplied, setMarkingApplied] = useState(false)
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false)
+  const [replyChannel, setReplyChannel] = useState('')
+  const [replyOutcome, setReplyOutcome] = useState<'interview' | 'rejected' | 'offer' | 'other'>('interview')
+  const [savingReply, setSavingReply] = useState(false)
 
   async function load() {
     const detail = await getJob(jobId)
@@ -65,6 +74,35 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
     }
   }
 
+  async function handleMarkApplied() {
+    setMarkingApplied(true)
+    setError(null)
+    try {
+      await markApplied(jobId)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Mark as applied failed')
+    } finally {
+      setMarkingApplied(false)
+    }
+  }
+
+  async function handleSaveReply() {
+    if (!job?.application) return
+    setSavingReply(true)
+    setError(null)
+    try {
+      await recordReply(job.application.id, replyChannel, replyOutcome)
+      setReplyDialogOpen(false)
+      setReplyChannel('')
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Recording reply failed')
+    } finally {
+      setSavingReply(false)
+    }
+  }
+
   if (!job) {
     return (
       <Box className="flex justify-center items-center min-h-screen">
@@ -97,11 +135,65 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
         </Alert>
       )}
 
-      <Box className="flex gap-2 my-4">
+      <Box className="flex gap-2 my-4 items-center">
         <Button variant="outlined" color="error" onClick={handleReject}>
           Reject job
         </Button>
+
+        {!job.application && (
+          <Button
+            variant="outlined"
+            onClick={handleMarkApplied}
+            disabled={markingApplied || !job.resume_versions.some((v) => v.approved)}
+          >
+            {markingApplied ? 'Marking…' : 'Mark as applied'}
+          </Button>
+        )}
+
+        {job.application && !job.application.replied_at && (
+          <Button variant="contained" onClick={() => setReplyDialogOpen(true)}>
+            I got a reply
+          </Button>
+        )}
+
+        {job.application?.replied_at && (
+          <Chip
+            label={`Reply via ${job.application.reply_channel} · ${job.application.outcome} · ${new Date(
+              job.application.replied_at,
+            ).toLocaleDateString()}`}
+            color="info"
+          />
+        )}
       </Box>
+
+      <Dialog open={replyDialogOpen} onClose={() => setReplyDialogOpen(false)}>
+        <DialogTitle>Where did the reply come from?</DialogTitle>
+        <DialogContent className="flex flex-col gap-4 pt-2 min-w-80">
+          <TextField
+            label="Channel (e.g. email, LinkedIn, portal, phone)"
+            value={replyChannel}
+            onChange={(e) => setReplyChannel(e.target.value)}
+            autoFocus
+          />
+          <TextField
+            select
+            label="Outcome"
+            value={replyOutcome}
+            onChange={(e) => setReplyOutcome(e.target.value as typeof replyOutcome)}
+          >
+            <MenuItem value="interview">Interview request</MenuItem>
+            <MenuItem value="rejected">Rejected</MenuItem>
+            <MenuItem value="offer">Offer</MenuItem>
+            <MenuItem value="other">Other</MenuItem>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReplyDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaveReply} disabled={savingReply || !replyChannel.trim()}>
+            {savingReply ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {job.job_context && (
         <Paper variant="outlined" className="p-4 mb-6">

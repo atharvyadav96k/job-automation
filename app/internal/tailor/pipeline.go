@@ -49,6 +49,10 @@ func (p *Pipeline) Run(ctx context.Context, jobID int64) (Result, error) {
 		return Result{}, fmt.Errorf("job context: %w", err)
 	}
 
+	if err := DetectSkillGaps(ctx, p.pool, jobID, jobCtx.KeyRequirements); err != nil {
+		return Result{}, fmt.Errorf("detect skill gaps: %w", err)
+	}
+
 	var skillsJSON []byte
 	var experienceJSON []byte
 	var projectsJSON []byte

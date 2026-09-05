@@ -10,11 +10,15 @@
       "category": "backend"
     },
     {
-      "name": ".NET",
+      "name": "Java",
       "category": "backend"
     },
     {
-      "name": "C#",
+      "name": "REST APIs",
+      "category": "backend"
+    },
+    {
+      "name": "Gorilla Mux",
       "category": "backend"
     },
     {
@@ -22,15 +26,7 @@
       "category": "frontend"
     },
     {
-      "name": "Angular",
-      "category": "frontend"
-    },
-    {
       "name": "JavaScript",
-      "category": "frontend"
-    },
-    {
-      "name": "TypeScript",
       "category": "frontend"
     },
     {
@@ -38,7 +34,7 @@
       "category": "database"
     },
     {
-      "name": "SQL Server",
+      "name": "MySQL",
       "category": "database"
     },
     {
@@ -46,8 +42,8 @@
       "category": "database"
     },
     {
-      "name": "REST APIs",
-      "category": "backend"
+      "name": "PgBouncer",
+      "category": "database"
     },
     {
       "name": "Webhooks",
@@ -58,7 +54,7 @@
       "category": "integration"
     },
     {
-      "name": "System Integration",
+      "name": "Google Pub/Sub",
       "category": "integration"
     },
     {
@@ -66,7 +62,15 @@
       "category": "integration"
     },
     {
+      "name": "System Integration",
+      "category": "integration"
+    },
+    {
       "name": "Docker",
+      "category": "devops"
+    },
+    {
+      "name": "Kubernetes",
       "category": "devops"
     },
     {
@@ -74,7 +78,51 @@
       "category": "devops"
     },
     {
+      "name": "GitHub Actions",
+      "category": "devops"
+    },
+    {
+      "name": "CI/CD Automation",
+      "category": "devops"
+    },
+    {
       "name": "Google Cloud Platform",
+      "category": "cloud"
+    },
+    {
+      "name": "Google Cloud Functions",
+      "category": "cloud"
+    },
+    {
+      "name": "Google Artifact Registry",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS EC2",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS S3",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS IAM",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS SNS",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS SQS",
+      "category": "cloud"
+    },
+    {
+      "name": "AWS CloudWatch",
       "category": "cloud"
     },
     {
@@ -83,6 +131,14 @@
     },
     {
       "name": "Linux",
+      "category": "tools"
+    },
+    {
+      "name": "Python",
+      "category": "tools"
+    },
+    {
+      "name": "Shell",
       "category": "tools"
     }
   ],
@@ -93,14 +149,13 @@
       "start_date": "2025-12",
       "end_date": "present",
       "bullets": [
-        "Developed enterprise integration solutions using Go, .NET, React, and Angular.",
-        "Built and maintained bidirectional synchronization between HubSpot and IntelliFlow.",
-        "Developed integration between NetDocuments and Practice for Windows (P4W).",
-        "Designed and implemented webhook-based workflows for real-time data synchronization.",
-        "Built event-driven services to ensure reliable and scalable data processing.",
-        "Developed REST APIs for enterprise applications and system integrations.",
-        "Worked with PostgreSQL, SQL Server, and Redis for data storage, caching, and synchronization.",
-        "Collaborated with cross-functional teams to deliver secure, scalable, and reliable integration solutions."
+        "Developed Go-based microservices for a HubSpot-Intelliflo integration, implementing reliable data synchronization across multiple independently deployable repositories and services.",
+        "Designed webhook-driven processing using Google Pub/Sub and Cloud Functions, filtering incoming events and routing each request to the appropriate downstream service for asynchronous processing.",
+        "Integrated PostgreSQL with PgBouncer connection pooling to control concurrent database connections and improve application reliability under load.",
+        "Implemented GitHub Actions pipelines with path-based change detection, deploying only the affected microservice, Cloud Function, or infrastructure component instead of rebuilding the entire system.",
+        "Provisioned and managed cloud resources using Terraform with remote state stored in Amazon S3, enabling reproducible and version-controlled infrastructure deployments.",
+        "Dockerized Go services and stored container images in Google Artifact Registry, using Gorilla Mux to implement HTTP APIs and webhook endpoints.",
+        "Developed a React-based operational interface for identifying failed data synchronizations and enabling users to retry or resolve failed records, improving system recoverability and operational reliability."
       ]
     },
     {
@@ -122,6 +177,18 @@
         "Completed a one-month internship focused on MERN stack development.",
         "Collaborated with the development team to build and maintain web application features."
       ]
+    }
+  ],
+  "projects": [
+    {
+      "title": "High-Performance Redis Clone",
+      "tech_stack": "Java, multithreading, AOF persistence, LRU cache, sharding",
+      "link": "https://github.com/atharvyadav96k/redis"
+    },
+    {
+      "title": "Custom Interpreted Language (Compiler Design)",
+      "tech_stack": "Lexer, parser, AST, custom interpreter",
+      "link": "https://github.com/atharvyadav96k/own-coding-language"
     }
   ],
   "education": [

@@ -95,6 +95,28 @@ job_context (
   model_used, created_at
 )
 
+-- Phase 1.5: real GitHub repos, used as verifiable evidence for skill claims.
+-- Never fabricate a skill/project the pipeline can't trace back to one of
+-- these rows (or to a manually-entered profile project/experience bullet).
+repos (
+  id, github_id, name, github_url, description,
+  language, topics JSONB, stars,
+  last_commit_at, synced_at
+)
+
+-- Derived from a repo's language + topics (simple keyword extraction to
+-- start, no dependency-manifest parsing yet). confidence is always
+-- 'inferred' until a manual evidence path exists.
+skill_evidence (
+  id, skill_name, repo_id, confidence, created_at
+)
+
+-- One row per job requirement (from job_context.key_requirements) that has
+-- no matching skill_evidence — surfaced for manual review, never auto-filled.
+skill_gaps (
+  id, job_id, missing_skill, reviewed BOOLEAN DEFAULT FALSE, created_at
+)
+
 -- Every tailoring attempt is kept, not overwritten — lets me compare versions
 -- and see exactly how the pipeline's reasoning evolved for a given job.
 resume_versions (
@@ -188,6 +210,20 @@ Before the pipeline can tailor good resumes, I need an easy way to keep my profi
 - Scraper/fetcher runs on a schedule (e.g. every few hours), pushes new job IDs into Redis queue, dedup against `jobs` table by URL
 - Worker consumes queue, cleans job description HTML → text, stores in `jobs`
 
+### Phase 1.5 — GitHub Evidence & Skill Gaps
+- A `ghsync` CLI (or scheduled sync, e.g. daily) pulls every non-fork repo for `GITHUB_USERNAME`
+  via the GitHub API, upserts it into `repos`, and derives `skill_evidence` from each repo's
+  language + topics (keyword-based to start — no dependency-manifest parsing yet)
+- After job_context extraction (Phase 2) produces `key_requirements` for a job, a matcher diffs
+  those requirements against the `skill_evidence` inventory (case-insensitive substring match)
+  and records any unmatched requirement as a `skill_gap` — a real gap to review manually, never
+  papered over by inventing a project or skill
+- This is evidence *input* to tailoring, not a replacement for the existing profile-based
+  projects/experience — the tailoring prompt still only uses real profile data; skill_gaps are
+  a separate signal surfaced for the human to act on (build something real, or accept the gap)
+- Hard constraint carried through from this addition: nothing here ever fabricates a skill,
+  project, or achievement — nothing is invented to fill a gap
+
 ### Phase 2 — Tailoring + ATS Scoring
 - Worker sends job description + profile data to Gemini
 - Prompt asks for: (a) match score, (b) tailored resume bullet points mapped to my existing docx template sections, (c) cover letter, (d) an ATS-style score estimate (keyword overlap with job description, formatting compatibility notes)
@@ -211,9 +247,10 @@ Before the pipeline can tailor good resumes, I need an easy way to keep my profi
 - Fill fields, upload the staged resume PDF, paste cover letter, answer simple screening questions using Gemini-generated answers where fields are dynamic
 - Take a screenshot before final submit, store path in `applications`
 - **Keep manual "click submit" step initially** — don't auto-submit until form-filling accuracy is proven over real runs
+- **Hard, permanent gate (separate from the "auto-submit" question below)**: the dispatcher must refuse to run at all for a job unless its `resume_versions.approved = true` row exists — enforced in code (not just by process/UI), on every submission path (browser automation and any later email path). No unreviewed resume is ever sent.
 
 ### Phase 5 — Controlled Automation
-- Once tailoring + form-filling are reliably accurate, allow auto-submit on a whitelist of low-risk platforms only
+- Once tailoring + form-filling are reliably accurate, allow auto-submit on a whitelist of low-risk platforms only — this only means the browser clicks the final submit button itself instead of waiting for me to click it; it does NOT relax the Phase 4 approval gate above. An approved `resume_versions` row is still required for every application, permanently, with no phase where that check is dropped
 - Add randomized delays between actions, one browser session at a time, daily application cap (both for detection risk and to avoid spamming low-quality applications)
 
 ### Phase 6 — Tracking Dashboard
@@ -223,7 +260,9 @@ Before the pipeline can tailor good resumes, I need an easy way to keep my profi
 ---
 
 ## Guardrails (keep throughout)
-- Human review before submission until proven reliable
+- **Resume generation is always on-demand, never automatic** — a job only gets tailored (an LLM call, stored as a new `resume_versions` row) when I explicitly trigger it; discovery alone never causes tailoring.
+- **No application is ever dispatched (browser automation or email) without an approved resume** — the dispatcher checks `resume_versions.approved = true` for that job before doing anything, on every submission path, permanently. This is not a training-wheels check that goes away once automation is trusted; automation trust only ever affects whether *I* click submit vs. the browser does, never whether approval is required.
+- **Scraping is throttled by backlog, not just a timer** — the discovery scheduler (and the on-demand `/api/discovery/run`) only actually fetches new postings when there are zero jobs still pending action (`status NOT IN ('applied', 'skipped')`, i.e. not yet applied to or explicitly rejected). If jobs are still sitting there needing review/tailoring/application, don't pile on more until that backlog clears.
 - Company-direct pages before third-party platforms (ToS + bot-detection risk is much lower)
 - One browser instance at a time — RAM budget
 - Daily application cap, even after automation is trusted
@@ -232,4 +271,4 @@ Before the pipeline can tailor good resumes, I need an easy way to keep my profi
 ## Explicitly Out of Scope (for now)
 - LinkedIn/Indeed automated Easy Apply (high ban risk, heavy bot detection)
 - Local LLM inference (hardware can't support it well)
-- Auto-submit without any review gate (until Phase 5 trust threshold is met)
+- Auto-submit without an approved resume version — this gate never lifts, at any phase

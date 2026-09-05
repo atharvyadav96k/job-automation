@@ -28,6 +28,21 @@ func (h *DiscoveryHandler) Register(mux *http.ServeMux) {
 // cheaper than lowering the global interval just to test one source.
 func (h *DiscoveryHandler) run(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	available, err := discovery.AvailableJobsCount(ctx, h.pool)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if available > 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"skipped":        true,
+			"reason":         "jobs still pending review/application",
+			"available_jobs": available,
+		})
+		return
+	}
+
 	sources, err := discovery.BuildSources(ctx, h.pool, h.remotiveEnabled, h.remotiveLimit)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

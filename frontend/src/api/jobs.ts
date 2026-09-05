@@ -48,6 +48,16 @@ export interface ResumeVersion {
   created_at: string
 }
 
+export interface Application {
+  id: number
+  method: string
+  status: string
+  submitted_at: string | null
+  replied_at: string | null
+  reply_channel: string | null
+  outcome: 'none' | 'interview' | 'rejected' | 'offer' | 'other'
+}
+
 export interface JobDetail {
   id: number
   title: string
@@ -58,6 +68,7 @@ export interface JobDetail {
   discovered_at: string
   job_context: JobContext | null
   resume_versions: ResumeVersion[]
+  application: Application | null
 }
 
 export function listJobs() {
@@ -82,4 +93,15 @@ export function rejectJob(jobId: number) {
 
 export function runDiscovery() {
   return apiFetch<{ sources: number; queued: number }>('/api/discovery/run', { method: 'POST' })
+}
+
+export function markApplied(jobId: number) {
+  return apiFetch<Application>(`/api/jobs/${jobId}/mark-applied`, { method: 'POST' })
+}
+
+export function recordReply(applicationId: number, channel: string, outcome: string) {
+  return apiFetch<void>(`/api/applications/${applicationId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ channel, outcome }),
+  })
 }

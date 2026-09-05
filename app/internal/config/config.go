@@ -17,6 +17,8 @@ type Config struct {
 	FrontendOrigin  string
 	ScrapeInterval  time.Duration
 	RemotiveEnabled bool
+	GitHubUsername  string
+	GitHubToken     string
 }
 
 func Load() (Config, error) {
@@ -36,6 +38,8 @@ func Load() (Config, error) {
 		FrontendOrigin:  envOrDefault("FRONTEND_ORIGIN", "http://localhost:5173"),
 		ScrapeInterval:  scrapeInterval,
 		RemotiveEnabled: envOrDefault("REMOTIVE_ENABLED", "true") == "true",
+		GitHubUsername:  os.Getenv("GITHUB_USERNAME"),
+		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")
